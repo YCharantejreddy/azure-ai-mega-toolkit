@@ -6,6 +6,35 @@ import urllib.error
 import traceback # Added for detailed exception logging
 from urllib.parse import urlparse, parse_qs # For robust URL parsing
 
+# Explicitly load .env file AT THE VERY TOP
+try:
+    from dotenv import load_dotenv
+    if load_dotenv():
+        print("DEBUG: .env file loaded successfully by load_dotenv().", flush=True)
+    else:
+        print("DEBUG: .env file not found by load_dotenv() or it's empty. Relying on system env vars.", flush=True)
+except ImportError:
+    print("DEBUG: python-dotenv library is not installed. .env file will not be loaded by load_dotenv().", flush=True)
+
+# Configure basic logging ASAP
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(module)s - %(funcName)s - L%(lineno)d - %(message)s')
+logger = logging.getLogger(__name__) # Use this logger for app-specific messages
+
+# Print raw environment variables immediately after attempting to load .env using the logger
+logger.info("--- RAW ENVIRONMENT VARIABLE VALUES (immediately after dotenv attempt) ---")
+logger.info(f"RAW FLASK_SECRET_KEY: '{os.environ.get('FLASK_SECRET_KEY')}'")
+logger.info(f"RAW TRANSLATOR_ENDPOINT: '{os.environ.get('TRANSLATOR_ENDPOINT')}'")
+logger.info(f"RAW TRANSLATOR_SUBSCRIPTION_KEY: '{os.environ.get('TRANSLATOR_SUBSCRIPTION_KEY')}'")
+logger.info(f"RAW TRANSLATOR_REGION: '{os.environ.get('TRANSLATOR_REGION')}'")
+logger.info(f"RAW LANGUAGE_ENDPOINT: '{os.environ.get('LANGUAGE_ENDPOINT')}'")
+logger.info(f"RAW LANGUAGE_SUBSCRIPTION_KEY: '{os.environ.get('LANGUAGE_SUBSCRIPTION_KEY')}'")
+logger.info(f"RAW SPEECH_ENDPOINT (not typically used directly by SDK, region is key): '{os.environ.get('SPEECH_ENDPOINT')}'") 
+logger.info(f"RAW SPEECH_SUBSCRIPTION_KEY: '{os.environ.get('SPEECH_SUBSCRIPTION_KEY')}'")
+logger.info(f"RAW SPEECH_REGION: '{os.environ.get('SPEECH_REGION')}'")
+logger.info(f"RAW VISION_ENDPOINT: '{os.environ.get('VISION_ENDPOINT')}'")
+logger.info(f"RAW VISION_SUBSCRIPTION_KEY: '{os.environ.get('VISION_SUBSCRIPTION_KEY')}'")
+logger.info("--- END RAW ENVIRONMENT VALUES ---")
+
 
 import requests
 import PyPDF2
@@ -47,34 +76,6 @@ from reportlab.lib.pagesizes import letter
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
-# Explicitly load .env file AT THE VERY TOP
-try:
-    from dotenv import load_dotenv
-    if load_dotenv():
-        print("DEBUG: .env file loaded successfully by load_dotenv().", flush=True)
-    else:
-        print("DEBUG: .env file not found by load_dotenv() or it's empty. Relying on system env vars.", flush=True)
-except ImportError:
-    print("DEBUG: python-dotenv library is not installed. .env file will not be loaded by load_dotenv().", flush=True)
-
-# Configure basic logging ASAP
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(name)s - %(module)s - %(funcName)s - L%(lineno)d - %(message)s')
-logger = logging.getLogger(__name__) # Use this logger for app-specific messages
-
-# Print raw environment variables immediately after attempting to load .env using the logger
-logger.info("--- RAW ENVIRONMENT VARIABLE VALUES (immediately after dotenv attempt) ---")
-logger.info(f"RAW FLASK_SECRET_KEY: '{os.environ.get('FLASK_SECRET_KEY')}'")
-logger.info(f"RAW TRANSLATOR_ENDPOINT: '{os.environ.get('TRANSLATOR_ENDPOINT')}'")
-logger.info(f"RAW TRANSLATOR_SUBSCRIPTION_KEY: '{os.environ.get('TRANSLATOR_SUBSCRIPTION_KEY')}'")
-logger.info(f"RAW TRANSLATOR_REGION: '{os.environ.get('TRANSLATOR_REGION')}'")
-logger.info(f"RAW LANGUAGE_ENDPOINT: '{os.environ.get('LANGUAGE_ENDPOINT')}'")
-logger.info(f"RAW LANGUAGE_SUBSCRIPTION_KEY: '{os.environ.get('LANGUAGE_SUBSCRIPTION_KEY')}'")
-logger.info(f"RAW SPEECH_ENDPOINT (not typically used directly by SDK, region is key): '{os.environ.get('SPEECH_ENDPOINT')}'") 
-logger.info(f"RAW SPEECH_SUBSCRIPTION_KEY: '{os.environ.get('SPEECH_SUBSCRIPTION_KEY')}'")
-logger.info(f"RAW SPEECH_REGION: '{os.environ.get('SPEECH_REGION')}'")
-logger.info(f"RAW VISION_ENDPOINT: '{os.environ.get('VISION_ENDPOINT')}'")
-logger.info(f"RAW VISION_SUBSCRIPTION_KEY: '{os.environ.get('VISION_SUBSCRIPTION_KEY')}'")
-logger.info("--- END RAW ENVIRONMENT VALUES ---")
 
 # --- Initialize Flask App ---
 app = Flask(__name__)
