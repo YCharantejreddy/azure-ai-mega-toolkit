@@ -2,20 +2,22 @@ Flask>=2.2,<3.0
 Flask-SQLAlchemy>=3.0,<3.1
 Flask-Login>=0.6,<0.7
 Werkzeug>=2.2,<3.0 # For password hashing and file uploads
-psycopg2-binary # For PostgreSQL on Azure (if you choose it over SQLite)
+psycopg2-binary # For PostgreSQL on Azure (if you choose it over SQLite) - keep if you might use it
 requests>=2.28,<3.0
 PyPDF2>=3.0,<3.1
 pytube>=15.0,<16.0
 
 # Azure SDKs
+# Using specific versions that we've identified or that are known to be stable.
+# The Docker environment (Debian Bullseye) should provide a compatible GLIBC for speech.
 azure-ai-textanalytics>=5.3.0,<5.4.0
-azure-cognitiveservices-speech==1.30.0
+azure-cognitiveservices-speech==1.30.0 # Pinning this as it was problematic with GLIBC
 azure-cognitiveservices-vision-computervision>=0.9.0,<0.10.0
-azure-ai-translation-text==1.0.0b1
+azure-ai-translation-text==1.0.0b1 # Pinning this to match the import style in your app.py
 
 msrest>=0.7.0,<0.8.0 # Dependency for older vision SDK auth (still used by ComputerVisionClient)
 
-# NLTK (core, punkt will be downloaded if needed)
+# NLTK (core, punkt will be downloaded if needed by app.py or startup script)
 nltk>=3.7,<3.9
 
 # PDF Export
@@ -23,8 +25,8 @@ reportlab>=4.0,<4.1
 youtube_transcript_api>=0.6.0,<0.7.0
 
 # For running on Azure with Gunicorn
-gunicorn>=20.1,<22.0
-python-dotenv>=0.20 # For local .env file management
+gunicorn>=20.1,<22.0 # Ensure Gunicorn is listed for the Docker CMD
+python-dotenv>=0.20 # For local .env file management (less critical in Docker if env vars are passed by Azure)
 
 # --- Optional T5 Model Dependencies (Large, uncomment if needed) ---
 # transformers>=4.20,<4.42
