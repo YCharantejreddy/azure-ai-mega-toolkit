@@ -1,12 +1,12 @@
 # app.py
 import os
 import sys # For flushing print statements
-import logging 
-import urllib.error 
+import logging
+import urllib.error
 import traceback # Added for detailed exception logging
 from urllib.parse import urlparse, parse_qs # For robust URL parsing
 
-# Explicitly load .env file AT THE VERY TOP
+# Explicitly load .env file AT THE VERY TOP (for local development)
 try:
     from dotenv import load_dotenv
     if load_dotenv():
@@ -28,7 +28,7 @@ logger.info(f"RAW TRANSLATOR_SUBSCRIPTION_KEY: '{os.environ.get('TRANSLATOR_SUBS
 logger.info(f"RAW TRANSLATOR_REGION: '{os.environ.get('TRANSLATOR_REGION')}'")
 logger.info(f"RAW LANGUAGE_ENDPOINT: '{os.environ.get('LANGUAGE_ENDPOINT')}'")
 logger.info(f"RAW LANGUAGE_SUBSCRIPTION_KEY: '{os.environ.get('LANGUAGE_SUBSCRIPTION_KEY')}'")
-logger.info(f"RAW SPEECH_ENDPOINT (not typically used directly by SDK, region is key): '{os.environ.get('SPEECH_ENDPOINT')}'") 
+logger.info(f"RAW SPEECH_ENDPOINT (not typically used directly by SDK, region is key): '{os.environ.get('SPEECH_ENDPOINT')}'")
 logger.info(f"RAW SPEECH_SUBSCRIPTION_KEY: '{os.environ.get('SPEECH_SUBSCRIPTION_KEY')}'")
 logger.info(f"RAW SPEECH_REGION: '{os.environ.get('SPEECH_REGION')}'")
 logger.info(f"RAW VISION_ENDPOINT: '{os.environ.get('VISION_ENDPOINT')}'")
@@ -79,13 +79,13 @@ from reportlab.lib.units import inch
 
 # --- Initialize Flask App ---
 app = Flask(__name__)
-app_logger = app.logger 
+app_logger = app.logger
 app_logger.info("Flask app object created.")
 
 # --- Configuration ---
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'default-dev-secret-key-SHOULD-BE-SET-IN-ENV')
 if app.config['SECRET_KEY'] == 'default-dev-secret-key-SHOULD-BE-SET-IN-ENV':
-    app_logger.warning("CRITICAL: FLASK_SECRET_KEY is using the default development value. SET THIS IN YOUR .env FILE!")
+    app_logger.warning("CRITICAL: FLASK_SECRET_KEY is using the default development value. SET THIS IN YOUR .env FILE or App Service Configuration!")
 
 app.config['UPLOAD_FOLDER'] = os.path.join(app.root_path, os.environ.get('UPLOAD_FOLDER_NAME', 'uploads'))
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
@@ -97,6 +97,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # --- Azure Service Credentials ---
+# These will be read from environment variables set by Azure App Service or Docker
 TRANSLATOR_KEY = os.environ.get('TRANSLATOR_SUBSCRIPTION_KEY')
 TRANSLATOR_ENDPOINT_URL = os.environ.get('TRANSLATOR_ENDPOINT')
 TRANSLATOR_REGION = os.environ.get('TRANSLATOR_REGION')
@@ -111,7 +112,7 @@ VISION_KEY = os.environ.get('VISION_SUBSCRIPTION_KEY')
 VISION_ENDPOINT_URL = os.environ.get('VISION_ENDPOINT')
 
 # --- Initialize Azure Clients ---
-app_logger.info(f"Attempting to initialize Azure clients with parsed env values...")
+app_logger.info("Attempting to initialize Azure clients with parsed env values...")
 
 def is_valid_endpoint_url(url_string, service_name="Service"):
     if not url_string:
@@ -121,7 +122,7 @@ def is_valid_endpoint_url(url_string, service_name="Service"):
     if not cleaned_url.startswith("https://"):
         app_logger.error(f"Invalid {service_name} Endpoint URL: '{cleaned_url}'. It must start with 'https://'.")
         return False
-    if "#" in cleaned_url[8:] or "\n" in cleaned_url or "\r" in cleaned_url: 
+    if "#" in cleaned_url[8:] or "\n" in cleaned_url or "\r" in cleaned_url:
         app_logger.error(f"Invalid characters (like # or newlines) found in {service_name} Endpoint URL: '{cleaned_url}'.")
         return False
     return True
@@ -162,7 +163,7 @@ if all([SPEECH_KEY, SPEECH_REGION]):
     try:
         app_logger.info(f"Initializing Speech client with Region: '{SPEECH_REGION}' and Key ending: '...{SPEECH_KEY[-4:] if SPEECH_KEY and len(SPEECH_KEY) >=4 else 'N/A'}'")
         speech_config = speechsdk.SpeechConfig(subscription=SPEECH_KEY, region=SPEECH_REGION)
-        speech_config.speech_recognition_language="en-US" 
+        speech_config.speech_recognition_language="en-US"
         app_logger.info("Speech config initialized successfully.")
     except Exception as e:
         app_logger.error(f"Failed to initialize Speech config: {e}\n{traceback.format_exc()}")
@@ -198,23 +199,27 @@ class Summary(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     original_text = db.Column(db.Text, nullable=True)
     summarized_text = db.Column(db.Text, nullable=False)
-    input_type = db.Column(db.String(100)) 
+    input_type = db.Column(db.String(100))
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
     timestamp = db.Column(db.DateTime, default=db.func.current_timestamp())
-    language = db.Column(db.String(10), nullable=True) 
+    language = db.Column(db.String(10), nullable=True)
 
 # --- Flask-Login Setup ---
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-login_manager.login_message_category = 'info' 
+login_manager.login_message_category = 'info'
 
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# --- NLTK Setup ---
-nltk_data_dir = os.path.join(app.root_path, 'nltk_data_local')
+# --- NLTK Setup (MODIFIED FOR DOCKER) ---
+# Use the NLTK_DATA environment variable if set (e.g., by Dockerfile),
+# otherwise default to a local path (relative to app.root_path for flexibility).
+# In Docker, NLTK_DATA will be /app/nltk_data_local as set in Dockerfile.
+nltk_data_dir = os.environ.get('NLTK_DATA', os.path.join(app.root_path, 'nltk_data_local'))
+
 if not os.path.exists(nltk_data_dir):
     try:
         os.makedirs(nltk_data_dir)
@@ -222,27 +227,32 @@ if not os.path.exists(nltk_data_dir):
     except OSError as e:
         app_logger.error(f"Could not create NLTK data directory {nltk_data_dir}: {e}")
 
+# Ensure this path is always in nltk.data.path for downloads and lookups
 if nltk_data_dir not in nltk.data.path:
     nltk.data.path.append(nltk_data_dir)
+app_logger.info(f"NLTK data path configured: {nltk.data.path}")
 
 def ensure_nltk_punkt():
     try:
-        nltk.data.find('tokenizers/punkt')
-        app_logger.info("'punkt' tokenizer found by NLTK.")
+        # Check if 'punkt' can be found in any of the NLTK data paths
+        # Using .zip is a more reliable way to check for the punkt resource
+        nltk.data.find('tokenizers/punkt.zip')
+        app_logger.info(f"'punkt' tokenizer found by NLTK in paths: {nltk.data.path}.")
     except LookupError:
-        app_logger.info("'punkt' not found by NLTK. Attempting download...")
+        app_logger.info(f"'punkt' not found. Attempting download to specified NLTK_DATA directory: {nltk_data_dir}...")
         try:
+            # Explicitly set download_dir to the path configured (either from ENV or default)
             nltk.download('punkt', download_dir=nltk_data_dir)
-            app_logger.info(f"NLTK 'punkt' downloaded to {nltk_data_dir}")
-            if nltk_data_dir not in nltk.data.path:
-                 nltk.data.path.append(nltk_data_dir)
+            app_logger.info(f"NLTK 'punkt' downloaded successfully to {nltk_data_dir}")
         except Exception as e:
-            app_logger.error(f"Failed to download NLTK 'punkt': {e}. Summarization features might be affected.")
-ensure_nltk_punkt() 
+            app_logger.error(f"Failed to download NLTK 'punkt' to {nltk_data_dir}: {e}. Summarization features might be affected.")
+            # Optionally, re-raise or handle if 'punkt' is absolutely critical for app startup
+ensure_nltk_punkt()
+# --- END OF NLTK Setup (MODIFIED FOR DOCKER) ---
 
 # --- Helper Functions ---
 ALLOWED_EXTENSIONS_PDF = {'pdf'}
-ALLOWED_EXTENSIONS_AUDIO = {'wav', 'mp3', 'ogg', 'm4a', 'mp4'} 
+ALLOWED_EXTENSIONS_AUDIO = {'wav', 'mp3', 'ogg', 'm4a', 'mp4'}
 ALLOWED_EXTENSIONS_IMG = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 
 def allowed_file(filename, allowed_extensions):
@@ -253,8 +263,8 @@ def extract_pdf_text_pypdf2(pdf_file_stream):
     try:
         pdf_reader = PyPDF2.PdfReader(pdf_file_stream)
         for page in pdf_reader.pages:
-            text += page.extract_text() or "" 
-        return text if text else None 
+            text += page.extract_text() or ""
+        return text if text else None
     except Exception as e:
         app_logger.error(f"PyPDF2 PDF extraction failed: {e}\n{traceback.format_exc()}")
         return None
@@ -265,32 +275,29 @@ def get_youtube_video_id(url):
         return None
     try:
         # Standard YouTube URLs
-        if "youtube.com/watch?v=" in url:
+        if "youtube.com/watch?v=" in url: # Example, adjust if your actual URLs are different
             return url.split("v=")[1].split("&")[0]
-        elif "youtu.be/" in url:
+        elif "youtu.be/" in url: # Example
             return url.split("youtu.be/")[1].split("?")[0]
-        
-        # Google User Content URLs (heuristic based on observed patterns)
-        # Example: https://www.youtube.com/watch?v=7onC2-SoHbc6 -> v parameter
-        # Example: https://www.youtube.com/watch?v=7onC2-SoHbc7 -> path component
+
         parsed_url = urlparse(url)
-        if "googleusercontent.com/youtube.com" in parsed_url.netloc: # Check if it's a googleusercontent URL for YouTube
-            if parsed_url.path == "/watch": # Check for "/watch" path
+        if "googleusercontent.com/youtube.com" in parsed_url.netloc:
+            if parsed_url.path == "/watch":
                 query_params = parse_qs(parsed_url.query)
                 video_id = query_params.get("v", [None])[0]
-                if video_id and len(video_id) == 11:
-                    app_logger.info(f"Extracted video ID '{video_id}' from googleusercontent URL '{url}' using 'v' parameter.")
+                if video_id and len(video_id) == 11: # Standard YouTube ID length
+                    app_logger.info(f"Extracted video ID '{video_id}' from URL '{url}' using 'v' parameter.")
                     return video_id
-            else: # If not "/watch", assume the ID might be the last part of the path
+            else:
                 path_parts = parsed_url.path.strip('/').split('/')
                 if path_parts:
                     potential_id = path_parts[-1]
-                    if len(potential_id) == 11: # Common length for YouTube video IDs
-                         app_logger.info(f"Extracted potential video ID '{potential_id}' from googleusercontent URL path '{url}'.")
+                    if len(potential_id) == 11:
+                         app_logger.info(f"Extracted potential video ID '{potential_id}' from URL path '{url}'.")
                          return potential_id
     except Exception as e:
         app_logger.error(f"Error parsing YouTube URL '{url}' to get video ID: {e}")
-    
+
     app_logger.warning(f"Could not extract a valid video ID from YouTube URL: {url}")
     return None
 
@@ -301,49 +308,51 @@ def get_transcript_from_youtube_api(video_url):
     if not video_id:
         return None, None, "Could not extract Video ID from URL for Transcript API."
 
+    video_title = f"YouTube Video ({video_id})" # Default title
     try:
-        # Fetch title using Pytube first to have it available
-        video_title = "YouTube Video (Transcript API)" # Default title
+        # Attempt to fetch title using Pytube, but don't let it block transcript fetching
         try:
-            yt_temp = YouTube(video_url) 
+            yt_temp = YouTube(f"https://www.youtube.com/watch?v=VIDEO_ID{video_id}") # Construct a standard URL for Pytube
             video_title = yt_temp.title
             app_logger.info(f"Fetched title '{video_title}' using Pytube for transcript API processing.")
         except Exception as title_e:
-            app_logger.warning(f"Could not fetch YouTube title with Pytube for {video_url} (transcript API context): {title_e}")
+            app_logger.warning(f"Could not fetch YouTube title with Pytube for {video_url} (ID: {video_id}) (transcript API context): {title_e}")
 
 
         app_logger.info(f"Attempting to fetch transcript for video ID: {video_id} (Title: {video_title}) using youtube_transcript_api.")
         transcript_list = YouTubeTranscriptApi.list_transcripts(video_id)
-        
-        transcript = None
-        preferred_languages = ['en', 'en-US', 'en-GB'] 
+
+        transcript_obj = None # Use a more descriptive name
+        preferred_languages = ['en', 'en-US', 'en-GB']
+        # Try manually created transcripts first
         for lang_code in preferred_languages:
             try:
-                transcript = transcript_list.find_manually_created_transcript([lang_code])
+                transcript_obj = transcript_list.find_manually_created_transcript([lang_code])
                 app_logger.info(f"Found manual transcript in '{lang_code}' for {video_id}.")
                 break
             except NoTranscriptFound:
                 continue
-        
-        if not transcript:
+
+        # If no manual transcript, try generated ones
+        if not transcript_obj:
             for lang_code in preferred_languages:
                 try:
-                    transcript = transcript_list.find_generated_transcript([lang_code])
+                    transcript_obj = transcript_list.find_generated_transcript([lang_code])
                     app_logger.info(f"Found auto-generated transcript in '{lang_code}' for {video_id}.")
                     break
                 except NoTranscriptFound:
                     continue
-        
-        if not transcript: 
-            app_logger.info(f"No preferred language transcript found for {video_id}. Trying any available transcript.")
-            # Iterate through all available transcripts
-            for available_transcript_obj in transcript_list: # This iterates over Transcript objects
-                transcript = available_transcript_obj # Assign the Transcript object
-                app_logger.info(f"Found an available transcript in language: {transcript.language} (code: {transcript.language_code}) for {video_id}")
-                break # Take the first one found
 
-        if transcript:
-            transcript_data = transcript.fetch()
+        # If still no preferred language transcript, try any available one
+        if not transcript_obj:
+            app_logger.info(f"No preferred language transcript found for {video_id}. Trying any available transcript.")
+            for available_transcript in transcript_list: # This iterates over Transcript objects
+                transcript_obj = available_transcript
+                app_logger.info(f"Found an available transcript in language: {transcript_obj.language} (code: {transcript_obj.language_code}) for {video_id}")
+                break
+
+        if transcript_obj:
+            transcript_data = transcript_obj.fetch()
             transcript_text = " ".join([entry['text'] for entry in transcript_data])
             app_logger.info(f"Successfully fetched transcript for video ID: {video_id} using youtube_transcript_api.")
             return transcript_text, video_title, None
@@ -354,7 +363,7 @@ def get_transcript_from_youtube_api(video_url):
     except TranscriptsDisabled:
         app_logger.warning(f"Transcripts are disabled for video ID: {video_id}.")
         return None, video_title, "Transcripts are disabled for this video."
-    except NoTranscriptFound: 
+    except NoTranscriptFound:
         app_logger.warning(f"No transcript found for video ID: {video_id} (API direct error).")
         return None, video_title, "No transcript found for this video via API."
     except Exception as e:
@@ -365,77 +374,79 @@ def get_transcript_from_youtube_api(video_url):
 def get_youtube_audio_stream_pytube(video_url):
     """Attempts to get an audio stream from a YouTube URL using Pytube."""
     if not video_url:
-        app_logger.error(f"No YouTube URL provided to Pytube.")
+        app_logger.error("No YouTube URL provided to Pytube.")
         return None, None, "YouTube URL cannot be empty."
     try:
         app_logger.info(f"Attempting to process YouTube URL with Pytube: {video_url}")
         yt = YouTube(video_url)
-        video_title = yt.title 
+        video_title = yt.title
         app_logger.info(f"Pytube object created for URL: {video_url}. Video Title: '{video_title}'")
 
         app_logger.info(f"Pytube: Checking availability for video: '{video_title}'...")
-        yt.check_availability()
+        yt.check_availability() # This can raise VideoUnavailable or VideoPrivate
         app_logger.info(f"Pytube: Video '{video_title}' passed availability check.")
-        
+
         app_logger.info(f"Pytube: Filtering for audio streams for video: '{video_title}'...")
         audio_stream = yt.streams.filter(only_audio=True, file_extension='mp4').order_by('abr').desc().first()
         if not audio_stream:
             app_logger.info(f"Pytube: No mp4 audio stream found for '{video_title}', trying webm.")
             audio_stream = yt.streams.filter(only_audio=True, file_extension='webm').order_by('abr').desc().first()
-        
+
         if audio_stream:
             app_logger.info(f"Pytube: Found audio stream for '{video_title}': {audio_stream}")
             audio_buffer = BytesIO()
             audio_stream.stream_to_buffer(audio_buffer)
-            audio_buffer.seek(0) 
-            return audio_buffer, video_title, None 
+            audio_buffer.seek(0)
+            return audio_buffer, video_title, None
         else:
             app_logger.warning(f"Pytube: No suitable audio stream (mp4 or webm) found for YouTube URL: {video_url} (Title: '{video_title}')")
             return None, video_title, f"Pytube: No suitable audio stream found for '{video_title}' (tried mp4 and webm)."
-    
+
     except VideoUnavailable:
         app_logger.error(f"Pytube error: Video {video_url} is unavailable.")
-        # Try to get title even if unavailable, if yt object was partially successful
-        title_on_error = "YouTube Video (Unavailable)"
-        try: title_on_error = YouTube(video_url).title
+        title_on_error = f"YouTube Video ({video_url} - Unavailable)"
+        try: title_on_error = YouTube(video_url, use_oauth=False, allow_oauth_cache=False).title
         except: pass
         return None, title_on_error, "Pytube: This YouTube video is unavailable."
     except VideoPrivate:
         app_logger.error(f"Pytube error: Video {video_url} is private.")
-        title_on_error = "YouTube Video (Private)"
-        try: title_on_error = YouTube(video_url).title
+        title_on_error = f"YouTube Video ({video_url} - Private)"
+        try: title_on_error = YouTube(video_url, use_oauth=False, allow_oauth_cache=False).title
         except: pass
         return None, title_on_error, "Pytube: This YouTube video is private."
     except RegexMatchError as rme:
         app_logger.error(f"Pytube RegexMatchError for URL '{video_url}': {rme}")
-        title_on_error = "YouTube Video (Regex Error)"
-        try: title_on_error = YouTube(video_url).title
+        title_on_error = f"YouTube Video ({video_url} - Regex Error)"
+        try: title_on_error = YouTube(video_url, use_oauth=False, allow_oauth_cache=False).title
         except: pass
-        return None, title_on_error, f"Pytube could not process this video due to internal regex matching issues."
-    except PytubeError as pe: 
+        return None, title_on_error, "Pytube could not process this video due to internal regex matching issues."
+    except PytubeError as pe:
         app_logger.error(f"Pytube specific error for URL '{video_url}': {type(pe).__name__} - {pe}")
-        title_on_error = "YouTube Video (Pytube Error)"
-        try: title_on_error = YouTube(video_url).title
+        title_on_error = f"YouTube Video ({video_url} - Pytube Error)"
+        try: title_on_error = YouTube(video_url, use_oauth=False, allow_oauth_cache=False).title
         except: pass
         if "regex_search" in str(pe).lower() or "cipher" in str(pe).lower():
-            return None, title_on_error, f"Pytube could not process this video, possibly due to YouTube updates or video restrictions (Cipher/Regex error)."
+            return None, title_on_error, "Pytube could not process this video, possibly due to YouTube updates or video restrictions (Cipher/Regex error)."
         return None, title_on_error, f"Pytube: Could not process YouTube URL (PytubeError: {type(pe).__name__})."
-    except urllib.error.HTTPError as httpe: 
+    except urllib.error.HTTPError as httpe:
         app_logger.error(f"Pytube: HTTPError processing YouTube URL '{video_url}': {httpe.code} {httpe.reason}\n{traceback.format_exc()}")
-        title_on_error = "YouTube Video (HTTP Error)"
-        try: title_on_error = YouTube(video_url).title # Attempt to get title
+        title_on_error = f"YouTube Video ({video_url} - HTTP Error)"
+        try: title_on_error = YouTube(video_url, use_oauth=False, allow_oauth_cache=False).title
         except: pass
-        if httpe.code == 400: 
-             return None, title_on_error, f"Pytube: Could not process YouTube URL: Bad Request (HTTP 400). Ensure the URL is a valid video page."
+        if httpe.code == 400:
+             return None, title_on_error, "Pytube: Could not process YouTube URL: Bad Request (HTTP 400). Ensure the URL is a valid video page."
         return None, title_on_error, f"Pytube: HTTP error {httpe.code} processing YouTube URL: {httpe.reason}"
-    except Exception as e: 
+    except Exception as e:
         app_logger.error(f"Pytube: Generic unexpected error processing YouTube URL '{video_url}': {type(e).__name__} - {e}\n{traceback.format_exc()}")
-        title_on_error = "YouTube Video (Unexpected Error)"
-        try: title_on_error = YouTube(video_url).title # Attempt to get title
+        title_on_error = f"YouTube Video ({video_url} - Unexpected Error)"
+        try: title_on_error = YouTube(video_url, use_oauth=False, allow_oauth_cache=False).title
         except: pass
         return None, title_on_error, f"Pytube: An unexpected error occurred ({type(e).__name__}). Check server logs for details."
 
 # --- Azure Service Functions ---
+# (translate_text_azure, analyze_text_sentiment_azure, summarize_text_azure,
+#  transcribe_audio_azure, analyze_image_azure functions remain the same as your uploaded app.py)
+# --- For brevity, I'm not repeating them here, but they should be included ---
 def translate_text_azure(text_to_translate, target_languages=["fr", "es"], source_language=None):
     if not translator_client:
         app_logger.error("translate_text_azure called but translator_client is not initialized.")
@@ -446,7 +457,7 @@ def translate_text_azure(text_to_translate, target_languages=["fr", "es"], sourc
         api_params = {'to': target_languages}
         if source_language and source_language.strip():
             app_logger.info(f"Translating with source_language: {source_language}")
-            api_params['source_language'] = source_language 
+            api_params['from_parameter'] = source_language 
         else:
             app_logger.info("Translating without source_language (auto-detect).")
         
@@ -796,6 +807,7 @@ def analyze_image_azure(image_stream_bytesio, features_list=["Description", "Tag
              return {"error": "Vision service client failed to initialize, likely due to an invalid 'VISION_ENDPOINT' in the .env file or configuration. Please verify the endpoint URL."}
         return {"error": f"An unexpected error occurred during image analysis: {str(e)}"}
 
+
 # --- PDF Export ---
 def export_to_pdf_reportlab(text_content, title="Summary"):
     buffer = BytesIO()
@@ -804,15 +816,15 @@ def export_to_pdf_reportlab(text_content, title="Summary"):
                             topMargin=inch, bottomMargin=inch)
     styles = getSampleStyleSheet()
     story = [Paragraph(title, styles['h1']), Spacer(1, 0.2*inch)]
-    
-    paragraphs = str(text_content).split('\n') 
+
+    paragraphs = str(text_content).split('\n')
     for para_text in paragraphs:
-        if para_text.strip(): 
+        if para_text.strip():
             story.append(Paragraph(para_text, styles['Normal']))
-            story.append(Spacer(1, 0.1*inch)) 
-        else: 
-            story.append(Spacer(1, 0.05*inch)) 
-    
+            story.append(Spacer(1, 0.1*inch))
+        else:
+            story.append(Spacer(1, 0.05*inch))
+
     doc.build(story)
     buffer.seek(0)
     return buffer
@@ -840,12 +852,12 @@ def register():
         if not username or not password:
             flash('Username and password are required.', 'danger')
             return redirect(url_for('register'))
-        
+
         existing_user = User.query.filter_by(username=username).first()
         if existing_user:
             flash('Username already exists. Please choose a different one.', 'warning')
             return redirect(url_for('register'))
-        
+
         hashed_password = generate_password_hash(password)
         new_user = User(username=username, password_hash=hashed_password)
         try:
@@ -858,7 +870,7 @@ def register():
             app_logger.error(f"Error during registration: {e}")
             flash('Registration failed due to a server error. Please try again.', 'danger')
             return redirect(url_for('register'))
-            
+
     return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -872,14 +884,14 @@ def login():
         if user and check_password_hash(user.password_hash, password):
             login_user(user, remember=request.form.get('remember_me') == 'on')
             flash('Login successful!', 'success')
-            next_page = request.args.get('next') 
+            next_page = request.args.get('next')
             return redirect(next_page or url_for('index_page'))
         else:
             flash('Login failed. Check username and password.', 'danger')
     return render_template('login.html')
 
 @app.route('/logout')
-@login_required 
+@login_required
 def logout():
     logout_user()
     flash('You have been logged out.', 'info')
@@ -891,11 +903,11 @@ def my_summaries():
     user_summaries = Summary.query.filter_by(user_id=current_user.id).order_by(Summary.timestamp.desc()).all()
     return render_template('my_summaries.html', summaries=user_summaries, current_user=current_user)
 
-@app.route('/delete_summary/<int:summary_id>', methods=['POST']) 
+@app.route('/delete_summary/<int:summary_id>', methods=['POST'])
 @login_required
 def delete_summary(summary_id):
-    summary_to_delete = Summary.query.get_or_404(summary_id) 
-    if summary_to_delete.author != current_user: 
+    summary_to_delete = Summary.query.get_or_404(summary_id)
+    if summary_to_delete.author != current_user:
         flash("You are not authorized to delete this summary.", "danger")
         return redirect(url_for('my_summaries'))
     try:
@@ -915,10 +927,10 @@ def export_summary_pdf_route(summary_id):
     if summary_obj.author != current_user:
         flash("Not authorized to export this summary.", "danger")
         return redirect(url_for('my_summaries'))
-    
-    pdf_title = f"Summary: {summary_obj.input_type[:30]}" 
+
+    pdf_title = f"Summary: {summary_obj.input_type[:30]}"
     pdf_buffer = export_to_pdf_reportlab(summary_obj.summarized_text, title=pdf_title)
-    
+
     return Response(pdf_buffer.getvalue(),
                     mimetype='application/pdf',
                     headers={"Content-Disposition": f"attachment;filename=summary_{summary_obj.id}.pdf"})
@@ -936,11 +948,11 @@ def process_text_content():
     app_logger.info(f"Processing request: inputType='{input_type}', actionType='{action}'")
 
     # --- Input Handling ---
-    if input_type == 'audio_file': 
+    if input_type == 'audio_file':
         if action != 'transcribe_audio':
             app_logger.warning(f"Input type is 'audio_file' but action is '{action}'. Forcing action to 'transcribe_audio'.")
-            action = 'transcribe_audio' 
-    
+            action = 'transcribe_audio'
+
     if input_type == 'text':
         text_content = data.get('textInput')
         original_filename_or_title = "Direct Text Input"
@@ -954,15 +966,14 @@ def process_text_content():
         db_input_type_name = f"PDF: {original_filename_or_title}"
         text_content = extract_pdf_text_pypdf2(file.stream)
         if text_content is None: return jsonify({"error": "Could not extract text from PDF."}), 500
-    
+
     elif input_type == 'youtube':
         youtube_url = data.get('youtubeUrl')
         if not youtube_url: return jsonify({"error": "YouTube URL missing."}), 400
 
         # Attempt 1: Use youtube_transcript_api
         transcript_text_api, video_title_api, error_msg_api = get_transcript_from_youtube_api(youtube_url)
-        
-        # Use the title from the API attempt, even if it failed to get transcript (it might have gotten title)
+
         current_video_title = video_title_api if video_title_api else "YouTube Video"
 
 
@@ -975,47 +986,44 @@ def process_text_content():
             app_logger.warning(f"youtube_transcript_api failed for {youtube_url}: {error_msg_api}. Falling back to Pytube audio download and Azure STT.")
             # Fallback to Pytube
             audio_buffer, video_title_pytube, error_msg_pytube = get_youtube_audio_stream_pytube(youtube_url)
-            
-            # Update title if Pytube got one and API didn't, or if Pytube's is more specific
-            if video_title_pytube and (not current_video_title or current_video_title == "YouTube Video (Transcript API)"):
+
+            if video_title_pytube and (not current_video_title or current_video_title == "YouTube Video (Transcript API)" or "Error" in current_video_title):
                 current_video_title = video_title_pytube
 
-            if error_msg_pytube: 
+            if error_msg_pytube:
                 return jsonify({"error": f"YouTube processing error (Pytube fallback for '{current_video_title}'): {error_msg_pytube}"}), 500
-            if not audio_buffer: 
+            if not audio_buffer:
                 return jsonify({"error": f"Failed to get audio stream from YouTube for '{current_video_title}' (Pytube fallback)."}), 500
-            
+
             original_filename_or_title = current_video_title
             db_input_type_name = f"YouTube (Fallback STT): {current_video_title}"
-            
+
             stt_result, transcript_text_stt = transcribe_audio_azure(audio_buffer, input_filename=f"youtube_{secure_filename(current_video_title[:20])}.wav")
-            if "error" in stt_result: 
+            if "error" in stt_result:
                 return jsonify({"error": f"Azure STT error for YouTube audio from '{current_video_title}' (Pytube fallback): {stt_result['error']}"}), 500
             text_content = transcript_text_stt
             app_logger.info(f"Successfully obtained transcript via Pytube + Azure STT for {youtube_url} (Title: {current_video_title})")
 
-        # If the original action was just to transcribe, return the transcript now.
-        if action == 'transcribe_audio': 
+        if action == 'transcribe_audio':
              return jsonify({"transcript": text_content, "message": f"YouTube video '{current_video_title}' processed successfully."})
 
 
     elif input_type == 'audio_file':
         # For direct audio file uploads, text_content will be populated during the 'transcribe_audio' action.
-        pass 
-    else: 
+        pass
+    else:
         app_logger.error(f"Invalid inputType received in main processing block: {input_type}")
         return jsonify({"error": "Invalid input type specified in request."}), 400
 
     # --- Action Handling ---
-    # Ensure text_content is available if the action is not transcribing an uploaded audio file.
     if not text_content and not (action == 'transcribe_audio' and input_type == 'audio_file'):
-         app_logger.warning(f"No text content available for action '{action}' with inputType '{input_type}'. This might be okay if it's a YouTube transcription followed by another action.")
-         if input_type != 'youtube': # If not YouTube and no text, then it's an error.
+         app_logger.warning(f"No text content available for action '{action}' with inputType '{input_type}'.")
+         if input_type != 'youtube':
              return jsonify({"error": "No text content to process for the selected action."}), 400
 
     result = {}
-    target_language = data.get('targetLanguage', 'en') 
-    source_language = data.get('sourceLanguage') 
+    target_language = data.get('targetLanguage', 'en')
+    source_language = data.get('sourceLanguage')
 
     if action == 'translate':
         if not text_content: return jsonify({"error": "No text provided for translation."}), 400
@@ -1030,30 +1038,25 @@ def process_text_content():
         if not text_content: return jsonify({"error": "No text provided for extractive summarization."}), 400
         result = summarize_text_azure(text_content, kind="extractive", max_sentence_count=int(data.get('sentenceCount', 3)))
     elif action == 'transcribe_audio':
-        if input_type == 'audio_file': 
+        if input_type == 'audio_file':
             if 'audioFile' not in request.files:
                 app_logger.error("Action is 'transcribe_audio' with inputType 'audio_file' but no 'audioFile' in request.files.")
                 return jsonify({"error": "No audio file part for transcription."}), 400
             audio_file = request.files['audioFile']
             if audio_file.filename == '' or not allowed_file(audio_file.filename, ALLOWED_EXTENSIONS_AUDIO):
                 return jsonify({"error": "Invalid audio file or no file selected for transcription."}), 400
-            
-            original_filename_or_title = secure_filename(audio_file.filename) 
+
+            original_filename_or_title = secure_filename(audio_file.filename)
             db_input_type_name = f"Audio File: {original_filename_or_title}"
             audio_buffer = BytesIO(audio_file.read())
             stt_result, transcript_text = transcribe_audio_azure(audio_buffer, input_filename=original_filename_or_title)
-            
+
             if "error" in stt_result: return jsonify({"error": f"Azure STT error for audio file: {stt_result['error']}"}), 500
             result = {"transcript": transcript_text}
             text_content = transcript_text # Update text_content with the transcript for saving
-        elif input_type == 'youtube': 
-             # This case was handled earlier for YouTube if action was transcribe_audio.
-             # If subsequent action (like summarize) on YouTube transcript, text_content is already set.
-             # So this specific block for 'youtube' under 'transcribe_audio' action might be redundant
-             # if the early return for YouTube transcription is always hit.
-             # However, providing the transcript again if it somehow reaches here is okay.
+        elif input_type == 'youtube':
              result = {"transcript": text_content, "message": f"YouTube video '{original_filename_or_title}' transcript was already processed."}
-        else: 
+        else:
             return jsonify({"error": "Transcription called with an unexpected configuration."}), 400
     else:
         app_logger.error(f"Invalid actionType received: {action}")
@@ -1062,64 +1065,61 @@ def process_text_content():
     # --- Save to Database (if applicable and user logged in) ---
     if current_user.is_authenticated:
         processed_text_to_save = None
-        # Determine what text was processed (summary or transcript)
         if 'summarize' in action and 'summary' in result and not result.get('error'):
             processed_text_to_save = result.get('summary')
         elif action == 'transcribe_audio' and 'transcript' in result and not result.get('error'):
             processed_text_to_save = result.get('transcript')
-        
+
         if processed_text_to_save:
             try:
-                # Use db_input_type_name for a more descriptive entry
-                # original_text_for_db is the text *before* summarization, or an indicator for transcriptions
-                original_text_for_db = text_content # Default: full text before summarization
-                if action == 'transcribe_audio': # For transcriptions, the "original" is the source name
+                original_text_for_db = text_content
+                if action == 'transcribe_audio':
                     original_text_for_db = f"Source: {db_input_type_name}"
-                elif input_type == 'youtube' and 'summarize' in action: # Summarizing a YT transcript
+                elif input_type == 'youtube' and 'summarize' in action:
                      original_text_for_db = f"Transcript from: {db_input_type_name}"
 
 
                 new_db_entry = Summary(
-                    original_text=original_text_for_db[:20000], # Increased limit for original text/transcript
-                    summarized_text=processed_text_to_save, 
-                    input_type=db_input_type_name, # Use the more descriptive name
+                    original_text=original_text_for_db[:20000],
+                    summarized_text=processed_text_to_save,
+                    input_type=db_input_type_name,
                     user_id=current_user.id,
-                    language=target_language if action == 'translate' else (source_language if source_language and action == 'translate' else 'en') 
+                    language=target_language if action == 'translate' else (source_language if source_language and action == 'translate' else 'en')
                 )
                 db.session.add(new_db_entry)
                 db.session.commit()
-                result['db_summary_id'] = new_db_entry.id 
+                result['db_summary_id'] = new_db_entry.id
                 result['save_status'] = f"{'Summary' if 'summarize' in action else 'Transcript'} saved for '{db_input_type_name}'."
             except Exception as e:
                 db.session.rollback()
                 app_logger.error(f"Error saving result to DB for {db_input_type_name}: {e}\n{traceback.format_exc()}")
                 result['save_status_error'] = "Could not save result to database due to a server error."
-    
+
     return jsonify(result)
 
 
 @app.route('/image-analyze-azure', methods=['POST'])
 def analyze_image_route_azure():
     if not computervision_client:
-        return jsonify({"error": "Image analysis service is not available or not configured."}), 503 
-    
+        return jsonify({"error": "Image analysis service is not available or not configured."}), 503
+
     if 'imageFile' not in request.files: return jsonify({"error": "No image file part."}), 400
     file = request.files['imageFile']
-    analysis_type_from_ui = request.form.get('analysisType', 'captions') 
-    
+    analysis_type_from_ui = request.form.get('analysisType', 'captions')
+
     if file.filename == '' or not allowed_file(file.filename, ALLOWED_EXTENSIONS_IMG):
         return jsonify({"error": "Invalid image file or no file selected."}), 400
-    
+
     image_stream_bytesio = BytesIO(file.read())
     features_to_request = []
-    
+
     if analysis_type_from_ui == 'captions': features_to_request = ["Description"]
     elif analysis_type_from_ui == 'tags': features_to_request = ["Tags"]
     elif analysis_type_from_ui == 'objects': features_to_request = ["Objects"]
     elif analysis_type_from_ui == 'fullAnalysis':
         features_to_request = ["Description", "Tags", "Objects", "Faces", "ImageType", "Color", "Adult", "Brands", "Categories"]
-    else: 
-        features_to_request = ["Description"] 
+    else:
+        features_to_request = ["Description"]
         app_logger.warning(f"Unknown image analysisType '{analysis_type_from_ui}', defaulting to Description.")
 
     result = analyze_image_azure(image_stream_bytesio, features_list=features_to_request)
@@ -1128,7 +1128,12 @@ def analyze_image_route_azure():
 # --- Main Execution & Setup ---
 def create_app_directories():
     """Creates necessary directories if they don't exist."""
-    dirs_to_create = [app.config['UPLOAD_FOLDER'], os.path.join(app.root_path, 'instance'), nltk_data_dir]
+    # For Docker, these paths will be relative to /app
+    dirs_to_create = [
+        app.config['UPLOAD_FOLDER'],
+        os.path.join(app.root_path, 'instance'),
+        nltk_data_dir # Use the globally defined nltk_data_dir
+    ]
     for d in dirs_to_create:
         if not os.path.exists(d):
             try:
@@ -1150,15 +1155,18 @@ def initialize_database(flask_app):
 
 
 if __name__ == '__main__':
-    logging.getLogger("werkzeug").setLevel(logging.WARNING) # Reduce Werkzeug log noise
-    logging.getLogger("pytube").setLevel(logging.WARNING) # Reduce Pytube log noise unless error
+    # This block is primarily for local development when running `python app.py`
+    # It will not be executed when Gunicorn runs the app in Docker.
+    logging.getLogger("werkzeug").setLevel(logging.WARNING) 
+    logging.getLogger("pytube").setLevel(logging.WARNING) 
     
-    create_app_directories()
+    create_app_directories() # Ensure directories are created for local dev
     initialize_database(app) 
     
-    app_logger.info("Azure AI Mega Toolkit starting on Flask development server...")
-    port = int(os.environ.get('PORT', 8000)) 
+    app_logger.info("Azure AI Mega Toolkit starting on Flask development server (local)...")
+    # Use a different port for local "python app.py" to avoid conflict if also running Docker locally on 8000
+    local_run_port = 5000
     is_development = os.environ.get('FLASK_ENV', 'production').lower() == 'development'
-    app_logger.info(f"Flask FLASK_ENV is '{os.environ.get('FLASK_ENV', 'production')}', running with debug={is_development}")
+    app_logger.info(f"Flask FLASK_ENV is '{os.environ.get('FLASK_ENV', 'production')}', running with debug={is_development} on port {local_run_port}")
     
-    app.run(debug=is_development, host='0.0.0.0', port=port)
+    app.run(debug=is_development, host='0.0.0.0', port=local_run_port)
