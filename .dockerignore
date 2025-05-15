@@ -1,0 +1,36 @@
+# Git files
+.git
+.gitignore
+
+# Docker specific
+Dockerfile
+.dockerignore
+
+# Python virtual environment
+.venv
+venv
+env
+*/__pycache__
+*.pyc
+*.pyo
+*.pyd
+*.egg-info
+dist/
+build/
+
+# Local instance/uploads data (if any)
+instance/*
+uploads/*
+# nltk_data_local/* # Let app download this into the container if needed
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# IDE specific
+.vscode/
+.idea/
+
+# Secrets / Local environment
+.env
+*.env
