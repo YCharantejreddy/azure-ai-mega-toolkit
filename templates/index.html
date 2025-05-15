@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Text, PDF & YouTube Tools - {{ super() }}{% endblock %}
+{% block header_title %}Text, Document & Media Tools{% endblock %}
+
+{% block content %}
+<section id="unifiedInputSection" class="space-y-6">
+    <h2 class="text-2xl font-semibold text-gray-700 border-b pb-2">Process Content</h2>
+
+    <form id="contentForm" class="space-y-4">
+        <div>
+            <label for="inputType" class="block text-sm font-medium text-gray-700">Select Input Type:</label>
+            <select id="inputType" name="inputType" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                <option value="">--Select Input--</option>
+                <option value="text">Direct Text Input</option>
+                <option value="pdf">Upload PDF File</option>
+                <option value="youtube">YouTube Video URL</option>
+                <option value="audio_file">Upload Audio File (for Transcription)</option>
+            </select>
+        </div>
+
+        <div id="textInputContainer" class="input-field-group hidden">
+            <label for="textInput" class="block text-sm font-medium text-gray-700">Enter Text:</label>
+            <textarea id="textInput" name="textInput" rows="8" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Paste your text here..."></textarea>
+        </div>
+
+        <div id="pdfFileContainer" class="input-field-group hidden">
+            <label for="pdfFile" class="block text-sm font-medium text-gray-700">Upload PDF:</label>
+            <input type="file" id="pdfFile" name="pdfFile" accept=".pdf" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+        </div>
+
+        <div id="youtubeUrlContainer" class="input-field-group hidden">
+            <label for="youtubeUrl" class="block text-sm font-medium text-gray-700">YouTube URL:</label>
+            <input type="url" id="youtubeUrl" name="youtubeUrl" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="https://www.youtube.com/watch?v=...">
+        </div>
+        
+        <div id="audioFileContainer" class="input-field-group hidden">
+            <label for="audioFile" class="block text-sm font-medium text-gray-700">Upload Audio File (WAV, MP3, M4A, OGG):</label>
+            <input type="file" id="audioFile" name="audioFile" accept=".wav,.mp3,.m4a,.ogg,.mp4" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+        </div>
+
+        <div>
+            <label for="actionType" class="block text-sm font-medium text-gray-700">Select Action:</label>
+            <select id="actionType" name="actionType" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                <option value="">--Select Action--</option>
+                <option value="translate">Translate</option>
+                <option value="sentiment">Analyze Sentiment</option>
+                <option value="summarize_extractive">Summarize (Extractive)</option>
+                <option value="summarize_abstractive">Summarize (Abstractive)</option>
+                <option value="transcribe_audio" id="transcribeAudioOption" class="hidden">Transcribe Audio</option>
+                </select>
+        </div>
+
+        <div id="translationOptions" class="hidden space-y-2">
+            <div>
+                <label for="targetLanguage" class="block text-sm font-medium text-gray-700">Target Language (for Translation):</label>
+                <input type="text" id="targetLanguage" name="targetLanguage" value="es" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="e.g., es, fr, de, ja">
+                <p class="mt-1 text-xs text-gray-500">Enter language code (e.g., 'es' for Spanish, 'fr' for French).</p>
+            </div>
+            <div>
+                <label for="sourceLanguage" class="block text-sm font-medium text-gray-700">Source Language (Optional for Translation):</label>
+                <input type="text" id="sourceLanguage" name="sourceLanguage" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="e.g., en (leave blank to auto-detect)">
+            </div>
+        </div>
+        
+        <div id="summarizationOptions" class="hidden">
+            <label for="sentenceCount" class="block text-sm font-medium text-gray-700">Number of Sentences (for Summarization):</label>
+            <input type="number" id="sentenceCount" name="sentenceCount" value="3" min="1" max="10" class="mt-1 block w-full py-2 px-3 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+        </div>
+
+        <button type="submit" id="processButton" class="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">
+            Process
+        </button>
+    </form>
+
+    <div id="loadingIndicator" class="hidden text-center py-4">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+        <p class="mt-2 text-sm text-gray-600">Processing, please wait...</p>
+    </div>
+
+    <div id="resultArea" class="mt-6 p-4 bg-gray-50 rounded-md shadow">
+        <h3 class="text-lg font-semibold text-gray-700 mb-2">Results:</h3>
+        <div id="resultOutput" class="text-sm text-gray-800 whitespace-pre-wrap break-words">
+            Your results will appear here.
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const inputTypeSelect = document.getElementById('inputType');
+    const actionTypeSelect = document.getElementById('actionType');
+    const textInputContainer = document.getElementById('textInputContainer');
+    const pdfFileContainer = document.getElementById('pdfFileContainer');
+    const youtubeUrlContainer = document.getElementById('youtubeUrlContainer');
+    const audioFileContainer = document.getElementById('audioFileContainer');
+    const translationOptions = document.getElementById('translationOptions');
+    const summarizationOptions = document.getElementById('summarizationOptions');
+    const transcribeAudioOption = document.getElementById('transcribeAudioOption');
+
+    const contentForm = document.getElementById('contentForm');
+    const processButton = document.getElementById('processButton');
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    const resultOutput = document.getElementById('resultOutput');
+
+    function toggleInputFields() {
+        const selectedType = inputTypeSelect.value;
+        textInputContainer.classList.add('hidden');
+        pdfFileContainer.classList.add('hidden');
+        youtubeUrlContainer.classList.add('hidden');
+        audioFileContainer.classList.add('hidden');
+        transcribeAudioOption.classList.add('hidden'); // Hide transcribe option by default
+
+        if (selectedType === 'text') {
+            textInputContainer.classList.remove('hidden');
+        } else if (selectedType === 'pdf') {
+            pdfFileContainer.classList.remove('hidden');
+        } else if (selectedType === 'youtube') {
+            youtubeUrlContainer.classList.remove('hidden');
+        } else if (selectedType === 'audio_file') {
+            audioFileContainer.classList.remove('hidden');
+            transcribeAudioOption.classList.remove('hidden'); // Show transcribe option
+            actionTypeSelect.value = 'transcribe_audio'; // Pre-select transcribe
+            toggleActionOptions(); // Update action options visibility
+        }
+        // If not audio_file, ensure transcribe_audio is not selected if it was pre-selected
+        if (selectedType !== 'audio_file' && actionTypeSelect.value === 'transcribe_audio') {
+            actionTypeSelect.value = ""; // Reset action if transcribe was selected for audio file
+        }
+    }
+
+    function toggleActionOptions() {
+        const selectedAction = actionTypeSelect.value;
+        translationOptions.classList.add('hidden');
+        summarizationOptions.classList.add('hidden');
+
+        if (selectedAction === 'translate') {
+            translationOptions.classList.remove('hidden');
+        } else if (selectedAction.startsWith('summarize_')) {
+            summarizationOptions.classList.remove('hidden');
+        }
+    }
+
+    inputTypeSelect.addEventListener('change', () => {
+        toggleInputFields();
+        toggleActionOptions(); // Also update action options based on new input type potentially resetting action
+    });
+    actionTypeSelect.addEventListener('change', toggleActionOptions);
+
+    contentForm.addEventListener('submit', async function(event) {
+        event.preventDefault();
+        loadingIndicator.classList.remove('hidden');
+        resultOutput.innerHTML = 'Processing...';
+        processButton.disabled = true;
+
+        const formData = new FormData(contentForm);
+        // Ensure actionType is correctly set, especially if pre-selected for audio
+        if (inputTypeSelect.value === 'audio_file') {
+            formData.set('actionType', 'transcribe_audio');
+        }
+
+
+        try {
+            const response = await fetch("{{ url_for('process_text_content') }}", {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+
+            if (response.ok) {
+                let htmlOutput = '';
+                if (data.error) {
+                    htmlOutput = `<p class="text-red-600 font-semibold">Error: ${data.error}</p>`;
+                } else {
+                    if (data.translations) {
+                        htmlOutput += '<h4 class="font-semibold mt-2">Translations:</h4>';
+                        for (const lang in data.translations) {
+                            htmlOutput += `<p><strong>${lang.toUpperCase()}:</strong> ${data.translations[lang]}</p>`;
+                        }
+                    }
+                    if (data.sentiment) {
+                        htmlOutput += '<h4 class="font-semibold mt-2">Sentiment:</h4>';
+                        htmlOutput += `<p>Overall: ${data.sentiment}</p>`;
+                        htmlOutput += `<p>Positive: ${data.confidence_scores.positive.toFixed(3)}, Neutral: ${data.confidence_scores.neutral.toFixed(3)}, Negative: ${data.confidence_scores.negative.toFixed(3)}</p>`;
+                    }
+                    if (data.summary) {
+                        htmlOutput += `<h4 class="font-semibold mt-2">Summary:</h4><p>${data.summary}</p>`;
+                    }
+                    if (data.transcript) {
+                        htmlOutput += `<h4 class="font-semibold mt-2">Transcript:</h4><p>${data.transcript}</p>`;
+                    }
+                     if (data.save_status) {
+                        htmlOutput += `<p class="text-green-600 mt-2">${data.save_status}</p>`;
+                        if (data.db_summary_id) {
+                             htmlOutput += `<p><a href="/export_summary_pdf/${data.db_summary_id}" class="text-blue-500 hover:underline">Export as PDF</a></p>`;
+                        }
+                    }
+                    if (data.save_status_error) {
+                        htmlOutput += `<p class="text-red-600 mt-2">${data.save_status_error}</p>`;
+                    }
+                }
+                resultOutput.innerHTML = htmlOutput || '<p>No specific results to display. Check raw JSON if needed.</p>';
+            } else {
+                resultOutput.innerHTML = `<p class="text-red-600 font-semibold">Request failed: ${response.statusText}</p><p>${data.error || 'Unknown server error'}</p>`;
+            }
+        } catch (error) {
+            resultOutput.innerHTML = `<p class="text-red-600 font-semibold">An error occurred: ${error.toString()}</p>`;
+        } finally {
+            loadingIndicator.classList.add('hidden');
+            processButton.disabled = false;
+        }
+    });
+
+    // Initial setup
+    document.addEventListener('DOMContentLoaded', () => {
+        toggleInputFields();
+        toggleActionOptions();
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,54 @@
+/* static/style.css */
+/* You can add custom styles here to complement or override Tailwind CSS */
+/* For example, if you want a specific font not easily available via Tailwind CDN */
+
+body {
+    /* font-family: 'Inter', sans-serif; /* Example: Using a Google Font */
+    /* Ensure Tailwind's base styles are not completely overridden if you add global body styles */
+}
+
+.input-field-group.hidden {
+    display: none;
+}
+
+/* Custom scrollbar for results if needed */
+.max-h-40::-webkit-scrollbar {
+    width: 8px;
+}
+.max-h-40::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+.max-h-40::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+.max-h-40::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+.max-h-32::-webkit-scrollbar {
+    width: 6px;
+}
+.max-h-32::-webkit-scrollbar-track {
+    background: #f7fafc; /* Tailwind gray-100 */
+    border-radius: 10px;
+}
+.max-h-32::-webkit-scrollbar-thumb {
+    background: #a0aec0; /* Tailwind gray-400 */
+    border-radius: 10px;
+}
+.max-h-32::-webkit-scrollbar-thumb:hover {
+    background: #718096; /* Tailwind gray-500 */
+}
+
+
+/* Ensure flash messages are noticeable */
+.flashes .alert {
+    margin-bottom: 1rem;
+}
+
+/* Add some subtle transitions */
+button, a {
+    transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+}

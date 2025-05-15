@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Image Analyzer - {{ super() }}{% endblock %}
+{% block header_title %}🖼️ Image Analysis Tools{% endblock %}
+
+{% block content %}
+<section id="imageAnalysisSection" class="space-y-6">
+    <h2 class="text-2xl font-semibold text-gray-700 border-b pb-2">Analyze Image Content</h2>
+
+    <form id="imageAnalysisForm" class="space-y-4">
+        <div>
+            <label for="imageFile" class="block text-sm font-medium text-gray-700">Upload Image:</label>
+            <input type="file" id="imageFile" name="imageFile" accept="image/*" class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100">
+        </div>
+
+        <div id="imagePreviewContainer" class="mt-2 mb-2 text-center">
+            <img id="imagePreview" src="#" alt="Image Preview" class="hidden max-w-xs mx-auto rounded-md shadow-sm"/>
+        </div>
+
+        <div>
+            <label for="imageAnalysisType" class="block text-sm font-medium text-gray-700">Type of Analysis:</label>
+            <select id="imageAnalysisType" name="analysisType" class="mt-1 block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                <option value="captions">Generate Captions (Description)</option>
+                <option value="tags">Identify Tags</option>
+                <option value="objects">Detect Objects</option>
+                <option value="fullAnalysis">Full Analysis (All Features)</option>
+            </select>
+        </div>
+
+        <button type="submit" id="analyzeImageButton" class="w-full inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50">
+            Analyze Image
+        </button>
+    </form>
+
+    <div id="imageLoadingIndicator" class="hidden text-center py-4">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+        <p class="mt-2 text-sm text-gray-600">Analyzing image, please wait...</p>
+    </div>
+
+    <div id="imageResultArea" class="mt-6 p-4 bg-gray-50 rounded-md shadow">
+        <h3 class="text-lg font-semibold text-gray-700 mb-2">Analysis Results:</h3>
+        <div id="imageResultOutput" class="text-sm text-gray-800 whitespace-pre-wrap break-words">
+            Your image analysis results will appear here.
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const imageFileIn = document.getElementById('imageFile');
+    const imagePreview = document.getElementById('imagePreview');
+    const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+    const imageAnalysisForm = document.getElementById('imageAnalysisForm');
+    const analyzeImageButton = document.getElementById('analyzeImageButton');
+    const imageLoadingIndicator = document.getElementById('imageLoadingIndicator');
+    const imageResultOutput = document.getElementById('imageResultOutput');
+
+    imageFileIn.addEventListener('change', function() {
+        const file = this.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                imagePreview.src = e.target.result;
+                imagePreview.classList.remove('hidden');
+            }
+            reader.readAsDataURL(file);
+        } else {
+            imagePreview.classList.add('hidden');
+        }
+    });
+
+    imageAnalysisForm.addEventListener('submit', async function(event) {
+        event.preventDefault();
+        if (!imageFileIn.files || imageFileIn.files.length === 0) {
+            imageResultOutput.innerHTML = '<p class="text-red-500">Please select an image file first.</p>';
+            return;
+        }
+
+        imageLoadingIndicator.classList.remove('hidden');
+        imageResultOutput.innerHTML = 'Analyzing...';
+        analyzeImageButton.disabled = true;
+
+        const formData = new FormData(imageAnalysisForm);
+
+        try {
+            const response = await fetch("{{ url_for('analyze_image_route_azure') }}", {
+                method: 'POST',
+                body: formData
+            });
+            const data = await response.json();
+
+            let htmlOutput = '';
+            if (response.ok) {
+                if (data.error) {
+                    htmlOutput = `<p class="text-red-600 font-semibold">Error: ${data.error}</p>`;
+                } else {
+                    htmlOutput += '<h4 class="font-semibold mt-2">Image Analysis:</h4>';
+                    if (data.description) {
+                        htmlOutput += `<p><strong>Description:</strong> ${data.description.join(', ')}</p>`;
+                    }
+                    if (data.tags) {
+                        htmlOutput += `<p><strong>Tags:</strong> ${data.tags.map(t => `${t.name} (${t.confidence})`).join(', ')}</p>`;
+                    }
+                    if (data.objects) {
+                        htmlOutput += '<p><strong>Objects Detected:</strong></p><ul>';
+                        data.objects.forEach(obj => {
+                            htmlOutput += `<li>${obj.object} (Confidence: ${obj.confidence})</li>`;
+                        });
+                        htmlOutput += '</ul>';
+                    }
+                    if (data.faces && data.faces.length > 0) {
+                        htmlOutput += `<p><strong>Faces Detected:</strong> ${data.faces.length}</p><ul>`;
+                        data.faces.forEach(face => {
+                             htmlOutput += `<li>Gender: ${face.gender}, Age: ${face.age}</li>`;
+                        });
+                        htmlOutput += '</ul>';
+                    }
+                    if (data.categories && data.categories.length > 0) {
+                        htmlOutput += '<p><strong>Categories:</strong></p><ul>';
+                        data.categories.forEach(cat => {
+                             htmlOutput += `<li>${cat.name} (Score: ${cat.score})</li>`;
+                        });
+                        htmlOutput += '</ul>';
+                    }
+                    if (data.adult_content) {
+                        htmlOutput += `<p><strong>Adult Content:</strong> Adult: ${data.adult_content.is_adult_content} (${data.adult_content.adult_score}), Racy: ${data.adult_content.is_racy_content} (${data.adult_content.racy_score}), Gory: ${data.adult_content.is_gory_content} (${data.adult_content.gore_score})</p>`;
+                    }
+                    if (data.message) { // For cases where no specific features are found but it's not an error
+                        htmlOutput += `<p>${data.message}</p>`;
+                    }
+                    if (Object.keys(htmlOutput).length === 0) {
+                         htmlOutput = '<p>No specific features detected by the analysis type selected.</p>';
+                    }
+                }
+            } else {
+                 htmlOutput = `<p class="text-red-600 font-semibold">Request failed: ${response.statusText}</p><p>${data.error || 'Unknown server error'}</p>`;
+            }
+            imageResultOutput.innerHTML = htmlOutput;
+
+        } catch (error) {
+            imageResultOutput.innerHTML = `<p class="text-red-600 font-semibold">An error occurred: ${error.toString()}</p>`;
+        } finally {
+            imageLoadingIndicator.classList.add('hidden');
+            analyzeImageButton.disabled = false;
+        }
+    });
+</script>
+{% endblock %}

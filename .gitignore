@@ -1,0 +1,60 @@
+# Python
+*.py[cod]
+__pycache__/
+*.so
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+.venv/
+venv/
+env/
+ENV/
+pip-selfcheck.json
+
+# Instance folder (for SQLite DB, session files etc.)
+instance/
+*.sqlite
+*.sqlite3
+*.db
+
+# Log files
+*.log
+logs/
+
+# Uploads & Temporary files
+uploads/
+nltk_data_local/ # NLTK data downloaded locally by the app
+*.tmp
+*.bak
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# IDE settings & project files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Secrets and environment files (NEVER commit .env)
+.env
+*.env.*
+!*.env.example # Keep example file
+
+# Coverage reports
+.coverage
+coverage.xml
+htmlcov/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Wheel files
+*.whl
